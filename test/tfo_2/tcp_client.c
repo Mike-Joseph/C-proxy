@@ -1,0 +1,106 @@
+/*
+  Copyright (c) 2019 The Mode Group
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<errno.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/types.h>
+#include<netinet/in.h>
+#include<sys/socket.h>
+#include<sys/wait.h>
+#include<netdb.h>
+#include<arpa/inet.h>
+
+#define PORT 53005
+#define FILE_NAME "46403.pdf"
+
+int main(int argc, char *argv[])
+{
+    int sockfd, numbytes;
+    struct sockaddr_in their_addr; /* client's address information */
+    struct hostent *he;
+    int str_len = 5000;
+    char str[str_len];
+    int conn = 0;
+
+    if (argc != 2)
+    {
+        fprintf(stderr,"usage: client hostname\n");
+        exit(1);
+    }
+
+    if ((he=gethostbyname(argv[1])) == NULL)
+    {
+        herror("gethostbyname");
+        exit(1);
+    }
+
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        perror("socket");
+        exit(1);
+    }
+
+    their_addr.sin_family = AF_INET;
+    their_addr.sin_port = htons(PORT);
+    their_addr.sin_addr = *((struct in_addr *)he->h_addr);
+    bzero(&(their_addr.sin_zero), 8);
+
+    FILE *fd = fopen(FILE_NAME, "rb");
+
+    if(fd == NULL)
+    {
+        perror("fopen");
+    }
+
+    int n;
+
+    while((n = fread(str, 1, str_len, fd)) > 0)
+    {
+
+        if(conn == 0)
+        {
+            if (sendto(sockfd, str, n, MSG_FASTOPEN,
+                       (struct sockaddr *)&their_addr, sizeof(struct sockaddr)) == -1)
+            {
+                perror("sendto");
+                exit(1);
+            }
+
+            printf("Successfully connected.\n");
+            conn = 1;
+
+        }
+        else
+        {
+            if(send(sockfd, str, n, 0) == -1)
+            {
+                perror("send");
+            }
+        }
+
+    }
+
+    printf("Finish.\n");
+
+    fclose(fd);
+    close(sockfd);
+    return 0;
+}
+
